@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="uz">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f7f7f7;
+        color: #1d1d1f;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 3rem;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 1rem;
+      }
+      .card {
+        background: white;
+        border-radius: 16px;
+        padding: 1rem 1.25rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+        margin-bottom: 1.25rem;
+      }
+      .section-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+        margin: 1rem 0 0.75rem;
+      }
+      .item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
+      }
+      .item:last-child {
+        border-bottom: none;
+      }
+      .item h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      .item span.price {
+        font-size: 0.9rem;
+        color: #666;
+      }
+      .controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      button.qty {
+        border: none;
+        background: #0a84ff;
+        color: white;
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: filter 0.15s ease-in-out;
+      }
+      button.qty:active {
+        filter: brightness(0.9);
+      }
+      button.qty:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .qty-value {
+        min-width: 24px;
+        text-align: center;
+        font-weight: 600;
+      }
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-bottom: 0.75rem;
+      }
+      .input-group label {
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .input-group input {
+        padding: 0.65rem;
+        font-size: 1rem;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-radius: 10px;
+      }
+      .summary {
+        display: grid;
+        gap: 0.5rem;
+        font-size: 0.95rem;
+      }
+      .summary div {
+        display: flex;
+        justify-content: space-between;
+      }
+      .submit-btn {
+        margin-top: 1.5rem;
+        width: 100%;
+        padding: 0.85rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        border-radius: 14px;
+        border: none;
+        background: linear-gradient(120deg, #0a84ff, #3a9ffd);
+        color: white;
+        cursor: pointer;
+        transition: opacity 0.2s ease-in-out;
+      }
+      .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .error {
+        color: #c92a2a;
+        margin-top: 0.75rem;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Choyxona buyurtmasi</h1>
+
+      <section class="card">
+        <div class="input-group">
+          <label for="customer">Mijoz yoki stol raqami</label>
+          <input id="customer" placeholder="Masalan: Stol 3 yoki Xasan" autocomplete="off" />
+        </div>
+        <div id="menu"></div>
+      </section>
+
+      <section class="card">
+        <div class="input-group">
+          <label for="discount">Chegirma (so'm)</label>
+          <input id="discount" type="number" min="0" value="0" />
+        </div>
+        <div class="input-group">
+          <label for="paid">Olingan to'lov (so'm)</label>
+          <input id="paid" type="number" min="0" value="0" />
+        </div>
+        <div class="summary">
+          <div><span>Jami:</span> <strong id="summary-total">0</strong></div>
+          <div><span>Chegirmadan keyin:</span> <strong id="summary-net">0</strong></div>
+          <div><span>Olingan to'lov:</span> <strong id="summary-paid">0</strong></div>
+          <div><span>Qaytim:</span> <strong id="summary-change">0</strong></div>
+          <div><span>Qarz:</span> <strong id="summary-balance">0</strong></div>
+        </div>
+        <button id="submit" class="submit-btn" disabled>Buyurtmani yuborish</button>
+        <div id="error" class="error" hidden></div>
+      </section>
+    </main>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+      }
+
+      const state = {
+        sections: [],
+        catalog: new Map(),
+        order: new Map(),
+        currency: "so'm",
+      };
+
+      const elements = {
+        menu: document.getElementById("menu"),
+        discount: document.getElementById("discount"),
+        paid: document.getElementById("paid"),
+        customer: document.getElementById("customer"),
+        summaryTotal: document.getElementById("summary-total"),
+        summaryNet: document.getElementById("summary-net"),
+        summaryPaid: document.getElementById("summary-paid"),
+        summaryChange: document.getElementById("summary-change"),
+        summaryBalance: document.getElementById("summary-balance"),
+        submit: document.getElementById("submit"),
+        error: document.getElementById("error"),
+      };
+
+      function format(amount) {
+        return `${Math.round(amount).toLocaleString("ru-RU")} ${state.currency}`;
+      }
+
+      function updateSummary() {
+        let total = 0;
+        state.catalog.forEach((item) => {
+          const qty = state.order.get(item.id) || 0;
+          total += item.price * qty;
+          const qtyElement = document.querySelector(`[data-qty="${item.id}"]`);
+          if (qtyElement) {
+            qtyElement.textContent = qty;
+          }
+        });
+
+        const discount = Math.max(parseInt(elements.discount.value || "0", 10), 0);
+        const paid = Math.max(parseInt(elements.paid.value || "0", 10), 0);
+        const net = Math.max(total - discount, 0);
+        const change = Math.max(paid - net, 0);
+        const balance = Math.max(net - paid, 0);
+
+        elements.summaryTotal.textContent = format(total);
+        elements.summaryNet.textContent = format(net);
+        elements.summaryPaid.textContent = format(paid);
+        elements.summaryChange.textContent = format(change);
+        elements.summaryBalance.textContent = format(balance);
+
+        elements.submit.disabled = state.order.size === 0;
+      }
+
+      function adjustQuantity(id, delta) {
+        const current = state.order.get(id) || 0;
+        const next = Math.max(current + delta, 0);
+        if (next === 0) {
+          state.order.delete(id);
+        } else {
+          state.order.set(id, next);
+        }
+        updateSummary();
+      }
+
+      function buildItemRow(item) {
+        const container = document.createElement("div");
+        container.className = "item";
+        container.innerHTML = `
+          <div>
+            <h3>${item.name}</h3>
+            <span class="price">${format(item.price)}</span>
+          </div>
+          <div class="controls">
+            <button class="qty" data-action="decrease">−</button>
+            <span class="qty-value" data-qty="${item.id}">0</span>
+            <button class="qty" data-action="increase">+</button>
+          </div>
+        `;
+
+        const [decButton, qtySpan, incButton] = container.querySelectorAll("button, span.qty-value");
+        decButton.addEventListener("click", () => adjustQuantity(item.id, -1));
+        incButton.addEventListener("click", () => adjustQuantity(item.id, 1));
+        return container;
+      }
+
+      function renderMenu() {
+        elements.menu.innerHTML = "";
+        state.sections.forEach((section) => {
+          const sectionTitle = document.createElement("div");
+          sectionTitle.className = "section-title";
+          sectionTitle.textContent = section.category;
+
+          elements.menu.appendChild(sectionTitle);
+          section.items.forEach((item) => {
+            elements.menu.appendChild(buildItemRow(item));
+          });
+        });
+      }
+
+      async function loadMenu() {
+        try {
+          const response = await fetch("/menu");
+          if (!response.ok) {
+            throw new Error("Server error");
+          }
+          const data = await response.json();
+          state.sections = data.sections || [];
+          state.catalog = new Map();
+          state.sections.forEach((section) => {
+            section.items.forEach((item) => state.catalog.set(item.id, item));
+          });
+          state.currency = data.currency || state.currency;
+          renderMenu();
+          updateSummary();
+        } catch (error) {
+          elements.error.hidden = false;
+          elements.error.textContent = "Menyu yuklanmadi. Tarmoqni tekshiring.";
+        }
+      }
+
+      elements.discount.addEventListener("input", updateSummary);
+      elements.paid.addEventListener("input", updateSummary);
+
+      elements.submit.addEventListener("click", () => {
+        if (state.order.size === 0) {
+          return;
+        }
+        const payload = {
+          customer: elements.customer.value.trim(),
+          items: Array.from(state.order.entries()).map(([id, quantity]) => ({ id, quantity })),
+          discount: Math.max(parseInt(elements.discount.value || "0", 10), 0),
+          paid: Math.max(parseInt(elements.paid.value || "0", 10), 0),
+        };
+        if (tg) {
+          tg.sendData(JSON.stringify(payload));
+          tg.close();
+        } else {
+          elements.error.hidden = false;
+          elements.error.textContent = "Telegram Web App ichida oching.";
+        }
+      });
+
+      loadMenu();
+    </script>
+  </body>
+</html>
